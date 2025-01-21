@@ -23,12 +23,12 @@
     <parent>
         <groupId>com.github.jcustenborder.kafka.connect</groupId>
         <artifactId>connect-utils-parent</artifactId>
-        <version>0.7-SNAPSHOT</version>
+        <version>1.0.0-SNAPSHOT</version>
     </parent>
     <artifactId>connect-utils-testing</artifactId>
     <name>connect-utils-testing</name>
     <description>A helper library for building Kafka Connect Connectors.</description>
-    <url>https://github.com/jcustenborder/connect-utils</url>
+    <url>https://github.com/confluentinc/connector-utils</url>
     <inceptionYear>2016</inceptionYear>
     <licenses>
         <license>
@@ -44,15 +44,23 @@
             <email>jcustenborder@gmail.com</email>
             <timezone>America/Chicago</timezone>
         </developer>
+        <developer>
+            <id>confluentinc/connect</id>
+            <organization>Confluent, Inc.</organization>
+            <organizationUrl>https://www.confluent.io</organizationUrl>
+            <roles>
+                <role>maintainer</role>
+            </roles>
+        </developer>
     </developers>
     <scm>
-        <connection>scm:git:https://github.com/jcustenborder/connect-utils.git</connection>
-        <developerConnection>scm:git:git@github.com:jcustenborder/connect-utils.git</developerConnection>
-        <url>https://github.com/jcustenborder/connect-utils</url>
+        <connection>scm:git:https://github.com/confluentinc/connector-utils.git</connection>
+        <developerConnection>scm:git:git@github.com:confluentinc/connector-utils.git</developerConnection>
+        <url>https://github.com/confluentinc/connector-utils</url>
     </scm>
     <issueManagement>
         <system>github</system>
-        <url>https://github.com/jcustenborder/connect-utils/issues</url>
+        <url>https://github.com/confluentinc/connector-utils/issues</url>
     </issueManagement>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

@@ -23,11 +23,11 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.github.jcustenborder.kafka.connect</groupId>
     <artifactId>connect-utils-parent</artifactId>
-    <version>0.7-SNAPSHOT</version>
+    <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>connect-utils-parent</name>
     <description>A helper library for building Kafka Connect Connectors.</description>
-    <url>https://github.com/jcustenborder/connect-utils</url>
+    <url>https://github.com/confluentinc/connector-utils</url>
     <inceptionYear>2019</inceptionYear>
     <licenses>
         <license>
@@ -46,6 +46,14 @@
             <email>jcustenborder@gmail.com</email>
             <timezone>America/Chicago</timezone>
         </developer>
+        <developer>
+            <id>confluentinc/connect</id>
+            <organization>Confluent, Inc.</organization>
+            <organizationUrl>https://www.confluent.io</organizationUrl>
+            <roles>
+                <role>maintainer</role>
+            </roles>
+        </developer>
     </developers>
     <modules>
         <module>connect-utils</module>
@@ -55,14 +63,15 @@
         <module>connect-utils-testing-data</module>
     </modules>
     <scm>
-        <connection>scm:git:https://github.com/jcustenborder/connect-utils.git</connection>
-        <developerConnection>scm:git:git@github.com:jcustenborder/connect-utils.git
+        <connection>scm:git:https://github.com/confluentinc/connector-utils.git</connection>
+        <developerConnection>scm:git:git@github.com:confluentinc/connector-utils.git
         </developerConnection>
-        <url>https://github.com/jcustenborder/connect-utils</url>
+        <url>https://github.com/confluentinc/connector-utils</url>
+        <tag>HEAD</tag>
     </scm>
     <issueManagement>
         <system>github</system>
-        <url>https://github.com/jcustenborder/connect-utils/issues</url>
+        <url>https://github.com/confluentinc/connector-utils/issues</url>
     </issueManagement>
     <properties>
         <kafka.version>2.8.0</kafka.version>
