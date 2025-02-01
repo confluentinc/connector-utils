@@ -56,7 +56,7 @@
         <developerConnection>scm:git:git@github.com:confluentinc/connector-utils.git
         </developerConnection>
         <url>https://github.com/confluentinc/connector-utils</url>
-      <tag>1.0.x</tag>
+      <tag>HEAD</tag>
   </scm>
     <issueManagement>
         <system>github</system>
