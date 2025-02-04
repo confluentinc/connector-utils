@@ -368,4 +368,18 @@
             </distributionManagement>
         </profile>
     </profiles>
+    <distributionManagement>
+        <repository>
+            <id>aws-release</id>
+            <name>AWS Release Repository</name>
+            <!-- defined as needed -->
+            <url>${confluent.release.repo}</url>
+        </repository>
+        <snapshotRepository>
+            <id>aws-snapshot</id>
+            <name>AWS Snapshot Repository</name>
+            <!-- defined as needed -->
+            <url>${confluent.snapshot.repo}</url>
+        </snapshotRepository>
+    </distributionManagement>
 </project>
