@@ -20,7 +20,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.github.jcustenborder.kafka.connect</groupId>
     <artifactId>connect-utils-parent</artifactId>
-    <version>1.0.1-SNAPSHOT</version>
+    <version>1.0.1</version>
     <packaging>pom</packaging>
     <name>connect-utils-parent</name>
     <description>A helper library for building Kafka Connect Connectors.</description>
@@ -64,7 +64,7 @@
         <developerConnection>scm:git:git@github.com:confluentinc/connector-utils.git
         </developerConnection>
         <url>https://github.com/confluentinc/connector-utils</url>
-        <tag>1.0.x</tag>
+        <tag>connect-utils-parent-1.0.1</tag>
     </scm>
     <issueManagement>
         <system>github</system>
