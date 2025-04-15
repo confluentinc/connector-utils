@@ -1,22 +1,11 @@
 name: connector-utils
-lang: java
-lang_version: 8
+lang: unknown
+lang_version: unknown
 git:
   enable: true
 codeowners:
   enable: true
-semaphore:
+renovatebot:
   enable: true
-  pipeline_type: cp
-  extra_deploy_args: -Pjenkins
-  extra_build_args: -Pjenkins
-  run_pint_merge: true
-code_artifact:
-  enable: true
-  package_paths:
-    - maven-snapshots/maven/com.github.jcustenborder.kafka.connect/connect-utils-parent
-    - maven-snapshots/maven/com.github.jcustenborder.kafka.connect/connect-utils
-    - maven-snapshots/maven/com.github.jcustenborder.kafka.connect/connect-utils-jackson
-    - maven-snapshots/maven/com.github.jcustenborder.kafka.connect/connect-utils-parser
-    - maven-snapshots/maven/com.github.jcustenborder.kafka.connect/connect-utils-testing
-    - maven-snapshots/maven/com.github.jcustenborder.kafka.connect/connect-utils-testing-data
+  automerge:
+    enable: true
