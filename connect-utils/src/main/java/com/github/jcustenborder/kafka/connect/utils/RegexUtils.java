@@ -2,7 +2,7 @@
  * Copyright [2023 - 2023] Confluent Inc.
  */
 
-package com.github.jcustenborder.kafka.connect.utils.common_utils;
+package com.github.jcustenborder.kafka.connect.utils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
