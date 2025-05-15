@@ -21,8 +21,6 @@ import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -37,9 +35,16 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class RegexUtilsTest {
-    private static final Logger log = LoggerFactory.getLogger(RegexUtilsTest.class);
     private static final long TIMEOUT_MS = 100;
     private static final long LONG_TIMEOUT_MS = 1000;
+    
+    // Test string constants
+    private static final String HELLO_WORLD = "hello world";
+    private static final String HELLO = "hello";
+    private static final String HELLO_WORLD_TITLE_CASE = "Hello World";
+    
+    // ReDoS pattern constant
+    private static final String REDOS_PATTERN = "(a+)+";
 
     @MethodSource("providerForTestReplaceAll")
     @ParameterizedTest
@@ -109,7 +114,7 @@ class RegexUtilsTest {
             // Test 1: Catastrophic backtracking with (a+)+
             Arguments.of(
                 String.join("", Collections.nCopies(1000, "a")),
-                Arrays.asList(String.join("", Collections.nCopies(1000, "(a+)+"))),
+                Arrays.asList(String.join("", Collections.nCopies(1000, REDOS_PATTERN))),
                 Arrays.asList("replaced"),
                 String.join("", Collections.nCopies(1000, "a"))  // Should return original string due to timeout
             )
@@ -132,26 +137,26 @@ class RegexUtilsTest {
     static Stream<Arguments> providerForTestFind() {
         return Stream.of(
             // Basic match test
-            Arguments.of("hello world", "hello", true, false),
+            Arguments.of(HELLO_WORLD, HELLO, true, false),
             // No match test
-            Arguments.of("hi world", "hello", false, false),
+            Arguments.of("hi world", HELLO, false, false),
             // Null input test
-            Arguments.of(null, "hello", false, false),
+            Arguments.of(null, HELLO, false, false),
             // Empty string test
-            Arguments.of("", "hello", false, false),
+            Arguments.of("", HELLO, false, false),
             // Case sensitive test
-            Arguments.of("Hello World", "hello", false, false),
+            Arguments.of(HELLO_WORLD_TITLE_CASE, HELLO, false, false),
             // Case insensitive test
-            Arguments.of("Hello World", "(?i)hello", true, false),
+            Arguments.of(HELLO_WORLD_TITLE_CASE, "(?i)" + HELLO, true, false),
             // Multiple matches test
-            Arguments.of("hello hello world", "hello", true, false),
+            Arguments.of(HELLO + " " + HELLO + " world", HELLO, true, false),
             // Special characters test
             Arguments.of("$100.50", "\\$\\d+\\.\\d+", true, false),
             // ReDoS protection tests
             // Test 1: Catastrophic backtracking with (a+)+
             Arguments.of(
                 String.join("", Collections.nCopies(1000, "a")),
-                String.join("", Collections.nCopies(1000, "(a+)+")),
+                String.join("", Collections.nCopies(1000, REDOS_PATTERN)),
                 false,
                 true
             )
@@ -174,26 +179,26 @@ class RegexUtilsTest {
     static Stream<Arguments> providerForTestMatches() {
         return Stream.of(
             // Exact match test
-            Arguments.of("hello world", "hello world", true, false),
+            Arguments.of(HELLO_WORLD, HELLO_WORLD, true, false),
             // Partial match test
-            Arguments.of("hello world", "hello", false, false),
+            Arguments.of(HELLO_WORLD, HELLO, false, false),
             // Null input test
-            Arguments.of(null, "hello", false, false),
+            Arguments.of(null, HELLO, false, false),
             // Empty string test
             Arguments.of("", "^$", true, false),
             // Case sensitive test
-            Arguments.of("Hello World", "hello world", false, false),
+            Arguments.of(HELLO_WORLD_TITLE_CASE, HELLO_WORLD, false, false),
             // Case insensitive test
-            Arguments.of("Hello World", "(?i)hello world", true, false),
+            Arguments.of(HELLO_WORLD_TITLE_CASE, "(?i)" + HELLO_WORLD, true, false),
             // Start/end anchors test
-            Arguments.of("hello world", "^hello world$", true, false),
+            Arguments.of(HELLO_WORLD, "^" + HELLO_WORLD + "$", true, false),
             // Special characters test
             Arguments.of("$100.50", "^\\$\\d+\\.\\d+$", true, false),
             // ReDoS protection tests
             // Test 1: Catastrophic backtracking with (a+)+
             Arguments.of(
                 String.join("", Collections.nCopies(1000, "a")),
-                String.join("", Collections.nCopies(1000, "(a+)+")),
+                String.join("", Collections.nCopies(1000, REDOS_PATTERN)),
                 false,
                 true
             )
