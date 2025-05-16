@@ -67,7 +67,7 @@ public final class RegexUtils {
     private final Supplier<T> operation;
     private T result;
 
-    public RegexExecutor(Supplier<T> operation) {
+    private RegexExecutor(Supplier<T> operation) {
       this.operation = operation;
     }
 
@@ -86,15 +86,8 @@ public final class RegexUtils {
   }
 
   private static <T> T executeOperation(
-      Pattern pattern,
-      String input,
-      String replacement,
       Supplier<T> operation,
       long timeoutMs) throws InterruptedException, ExecutionException, TimeoutException {
-
-    if (input == null) {
-      return null;
-    }
 
     RegexExecutor<T> executor = new RegexExecutor<>(operation);
     CompletableFuture<T> future = CompletableFuture.supplyAsync(() -> {
@@ -145,9 +138,6 @@ public final class RegexUtils {
     for (Map.Entry<Pattern, String> entry : replacements.entrySet()) {
       final String currentInput = currentResult;
       currentResult = executeOperation(
-          entry.getKey(),
-          currentInput,
-          entry.getValue(),
           () -> entry.getKey().matcher(currentInput).replaceAll(entry.getValue()),
           timeoutMs
       );
@@ -175,9 +165,6 @@ public final class RegexUtils {
       return false;
     }
     return executeOperation(
-        pattern,
-        input,
-        null,
         () -> pattern.matcher(input).find(),
         timeoutMs
     );
@@ -203,9 +190,6 @@ public final class RegexUtils {
       return false;
     }
     return executeOperation(
-        pattern,
-        input,
-        null,
         () -> pattern.matcher(input).matches(),
         timeoutMs
     );
