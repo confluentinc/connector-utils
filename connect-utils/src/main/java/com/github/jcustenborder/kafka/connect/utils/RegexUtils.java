@@ -16,9 +16,6 @@
 
 package com.github.jcustenborder.kafka.connect.utils;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -57,8 +54,6 @@ import java.util.function.Supplier;
  * OWASP ReDoS</a></p>
  */
 public final class RegexUtils {
-  private static final Logger log = LoggerFactory.getLogger(RegexUtils.class);
-
   private RegexUtils() {
     // Prevent instantiation
   }
@@ -100,14 +95,7 @@ public final class RegexUtils {
       }
     });
 
-    try {
-      return future.get(timeoutMs, TimeUnit.MILLISECONDS);
-    } catch (TimeoutException e) {
-      log.error(
-          "Regex operation exceeded timeout of {} ms.",
-          timeoutMs, e);
-      throw e;
-    }
+    return future.get(timeoutMs, TimeUnit.MILLISECONDS);
   }
 
   /**
