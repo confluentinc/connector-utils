@@ -1,5 +1,5 @@
 /**
- * Copyright [2023 - 2023] Confluent Inc.
+ * Copyright [2025 - 2025] Confluent Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
+import java.util.function.Supplier;
 
 /**
  * Utility class for performing regex operations with timeout protection against ReDoS attacks.
@@ -41,13 +42,13 @@ import java.util.regex.Pattern;
  *   </li>
  *   <li>
  *     <b>Common Thread Pool:</b> Using the common thread pool (e.g., via CompletableFuture) was
- *     considered, but blocking operations could negatively impact unrelated tasks sharing the pool.
+ *     considered, but multiple blocking operations might exhaust the common ForkJoinPool for other users.
  *   </li>
  *   <li>
  *     <b>ManagedBlocker:</b> The chosen approach is to use a custom ForkJoinPool.ManagedBlocker.
- *     This allows blocking operations to be managed efficiently by the ForkJoinPool, without
- *     requiring explicit thread pool management or impacting the common pool. This approach
- *     provides a balance between safety, performance, and ease of use for consumers.
+ *     This allows for dispatching blocking operations without exhausting the common ForkJoinPool,
+ *     while avoiding the complexity of explicit thread pool management. This approach provides
+ *     a balance between safety, performance, and ease of use for consumers.
  *   </li>
  * </ul>
  *
@@ -62,37 +63,16 @@ public final class RegexUtils {
     // Prevent instantiation
   }
 
-  private static class RegexExecutor implements ForkJoinPool.ManagedBlocker {
-    private final Pattern pattern;
-    private final String input;
-    private final String replacement;
-    private final OperationType operationType;
-    private String result;
-    private Boolean booleanResult;
-    private boolean timedOut;
+  private static class RegexExecutor<T> implements ForkJoinPool.ManagedBlocker {
+    private final Supplier<T> operation;
+    private T result;
 
-    public RegexExecutor(Pattern pattern, String input, String replacement, OperationType operationType) {
-      this.pattern = pattern;
-      this.input = input;
-      this.replacement = replacement;
-      this.operationType = operationType;
-      this.timedOut = false;
+    public RegexExecutor(Supplier<T> operation) {
+      this.operation = operation;
     }
 
     public boolean block() {
-      switch (operationType) {
-        case REPLACE:
-          result = pattern.matcher(input).replaceAll(replacement);
-          break;
-        case FIND:
-          booleanResult = pattern.matcher(input).find();
-          break;
-        case MATCHES:
-          booleanResult = pattern.matcher(input).matches();
-          break;
-        default:
-          throw new IllegalStateException("Unknown operation type: " + operationType);
-      }
+      result = operation.get();
       return true;
     }
 
@@ -100,44 +80,27 @@ public final class RegexUtils {
       return false;
     }
 
-    public String getStringResult() {
+    public T getResult() {
       return result;
     }
-
-    public Boolean getBooleanResult() {
-      return booleanResult;
-    }
-
-    public void setTimedOut(boolean timedOut) {
-      this.timedOut = timedOut;
-    }
-
-    public boolean isTimedOut() {
-      return timedOut;
-    }
   }
 
-  private enum OperationType {
-    REPLACE,
-    FIND,
-    MATCHES
-  }
-
-  private static String executeStringRegexOperation(
+  private static <T> T executeOperation(
       Pattern pattern,
       String input,
       String replacement,
-      long timeoutMs) throws InterruptedException, ExecutionException {
+      Supplier<T> operation,
+      long timeoutMs) throws InterruptedException, ExecutionException, TimeoutException {
 
     if (input == null) {
       return null;
     }
 
-    RegexExecutor executor = new RegexExecutor(pattern, input, replacement, OperationType.REPLACE);
-    CompletableFuture<String> future = CompletableFuture.supplyAsync(() -> {
+    RegexExecutor<T> executor = new RegexExecutor<>(operation);
+    CompletableFuture<T> future = CompletableFuture.supplyAsync(() -> {
       try {
         ForkJoinPool.managedBlock(executor);
-        return executor.getStringResult();
+        return executor.getResult();
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
         throw new CompletionException(e);
@@ -147,48 +110,15 @@ public final class RegexUtils {
     try {
       return future.get(timeoutMs, TimeUnit.MILLISECONDS);
     } catch (TimeoutException e) {
-      log.warn(
-          "Regex operation exceeded timeout of {} ms. Returning original string.",
+      log.error(
+          "Regex operation exceeded timeout of {} ms.",
           timeoutMs, e);
-      // Do not use the result of the regex operation after a timeout
-      return null; // Signal to caller that a timeout occurred
-    }
-  }
-
-  private static boolean executeBooleanRegexOperation(
-      Pattern pattern,
-      String input,
-      OperationType operationType,
-      long timeoutMs) throws InterruptedException, ExecutionException {
-
-    if (input == null) {
-      return false;
-    }
-
-    RegexExecutor executor = new RegexExecutor(pattern, input, null, operationType);
-    CompletableFuture<Boolean> future = CompletableFuture.supplyAsync(() -> {
-      try {
-        ForkJoinPool.managedBlock(executor);
-        return executor.getBooleanResult();
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        throw new CompletionException(e);
-      }
-    });
-
-    try {
-      return future.get(timeoutMs, TimeUnit.MILLISECONDS);
-    } catch (TimeoutException e) {
-      log.warn(
-          "Regex operation exceeded timeout of {} ms. Returning false.",
-          timeoutMs, e);
-      // On timeout, return false
-      return false;
+      throw e;
     }
   }
 
   /**
-   * Executes a regex replacement with timeout protection.
+   * Executes a {@link Pattern#matcher(CharSequence) matcher()}.{@link java.util.regex.Matcher#replaceAll(String) replaceAll(String)} operation with timeout protection.
    * See class-level JavaDoc for details on ReDoS protection.
    *
    * @param input        The input string
@@ -197,11 +127,12 @@ public final class RegexUtils {
    * @return The result of the operation
    * @throws InterruptedException if the current thread is interrupted
    * @throws ExecutionException   if the operation throws an exception
+   * @throws TimeoutException     if the operation exceeds the specified timeout
    */
   public static String replaceAll(
       String input,
       Map<Pattern, String> replacements,
-      long timeoutMs) throws InterruptedException, ExecutionException {
+      long timeoutMs) throws InterruptedException, ExecutionException, TimeoutException {
 
     if (input == null) {
       return null;
@@ -212,23 +143,20 @@ public final class RegexUtils {
 
     String currentResult = input;
     for (Map.Entry<Pattern, String> entry : replacements.entrySet()) {
-      String result = executeStringRegexOperation(
+      final String currentInput = currentResult;
+      currentResult = executeOperation(
           entry.getKey(),
-          currentResult,
+          currentInput,
           entry.getValue(),
+          () -> entry.getKey().matcher(currentInput).replaceAll(entry.getValue()),
           timeoutMs
       );
-      if (result == null) {
-        // Timeout occurred, return original input
-        return input;
-      }
-      currentResult = result;
     }
     return currentResult;
   }
 
   /**
-   * Executes a regex find operation with timeout protection.
+   * Executes a {@link Pattern#matcher(CharSequence) matcher()}.{@link java.util.regex.Matcher#find() find()} operation with timeout protection.
    * See class-level JavaDoc for details on ReDoS protection.
    *
    * @param pattern   The pattern to match
@@ -237,16 +165,26 @@ public final class RegexUtils {
    * @return true if the pattern is found, false otherwise
    * @throws InterruptedException if the current thread is interrupted
    * @throws ExecutionException   if the operation throws an exception
+   * @throws TimeoutException     if the operation exceeds the specified timeout
    */
   public static boolean find(
       Pattern pattern,
       String input,
-      long timeoutMs) throws InterruptedException, ExecutionException {
-    return executeBooleanRegexOperation(pattern, input, OperationType.FIND, timeoutMs);
+      long timeoutMs) throws InterruptedException, ExecutionException, TimeoutException {
+    if (input == null) {
+      return false;
+    }
+    return executeOperation(
+        pattern,
+        input,
+        null,
+        () -> pattern.matcher(input).find(),
+        timeoutMs
+    );
   }
 
   /**
-   * Executes a regex matches operation with timeout protection.
+   * Executes a {@link Pattern#matcher(CharSequence) matcher()}.{@link java.util.regex.Matcher#matches() matches()} operation with timeout protection.
    * See class-level JavaDoc for details on ReDoS protection.
    *
    * @param pattern   The pattern to match
@@ -255,11 +193,21 @@ public final class RegexUtils {
    * @return true if the pattern matches the entire input, false otherwise
    * @throws InterruptedException if the current thread is interrupted
    * @throws ExecutionException   if the operation throws an exception
+   * @throws TimeoutException     if the operation exceeds the specified timeout
    */
   public static boolean matches(
       Pattern pattern,
       String input,
-      long timeoutMs) throws InterruptedException, ExecutionException {
-    return executeBooleanRegexOperation(pattern, input, OperationType.MATCHES, timeoutMs);
+      long timeoutMs) throws InterruptedException, ExecutionException, TimeoutException {
+    if (input == null) {
+      return false;
+    }
+    return executeOperation(
+        pattern,
+        input,
+        null,
+        () -> pattern.matcher(input).matches(),
+        timeoutMs
+    );
   }
 } 
