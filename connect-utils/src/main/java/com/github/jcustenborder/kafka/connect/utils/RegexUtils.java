@@ -75,12 +75,18 @@ public final class RegexUtils {
     }
   });
 
-  // Ensure the pool is cleaned up on JVM shutdown (primarily for environments
-  // that reload classes or run short-lived JVMs).
+  // Guard against duplicate shutdown-hook registration in environments that may reload classes
+  // (e.g. some application servers, unit-test frameworks with custom ClassLoaders). The JVM
+  // runs class initializers once per ClassLoader, so this is mainly defensive, but it ensures we
+  // never register multiple identical hooks within the same ClassLoader.
+  private static final AtomicBoolean SHUTDOWN_HOOK_ADDED = new AtomicBoolean();
+
   static {
-    Runtime.getRuntime().addShutdownHook(new Thread(
-        () -> REGEX_EXECUTOR_SERVICE.shutdownNow(),
-        "regex-util-shutdown"));
+    if (SHUTDOWN_HOOK_ADDED.compareAndSet(false, true)) {
+      Runtime.getRuntime().addShutdownHook(new Thread(
+          () -> REGEX_EXECUTOR_SERVICE.shutdownNow(),
+          "regex-util-shutdown"));
+    }
   }
 
   private static class RegexExecutor<T> implements ForkJoinPool.ManagedBlocker {
@@ -126,7 +132,8 @@ public final class RegexUtils {
     try {
       return future.get(timeoutMs, TimeUnit.MILLISECONDS);
     } catch (TimeoutException e) {
-      // Attempt to cancel; regex operations aren't interruptible but avoids leaking the Future
+      // Attempt to cancel. Regex operations themselves are not interruptible, but cancelling the
+      // Future prevents resource leaks and allows callers to observe completion promptly.
       future.cancel(true);
       throw e;
     }
