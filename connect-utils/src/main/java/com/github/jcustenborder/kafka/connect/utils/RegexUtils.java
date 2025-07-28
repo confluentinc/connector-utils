@@ -25,6 +25,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
@@ -76,7 +77,7 @@ public final class RegexUtils {
 
   private static class RegexExecutor<T> implements ForkJoinPool.ManagedBlocker {
     private final Supplier<T> operation;
-    private volatile boolean done;
+    private final AtomicBoolean done = new AtomicBoolean();
     private T result;
 
     private RegexExecutor(Supplier<T> operation) {
@@ -84,15 +85,14 @@ public final class RegexUtils {
     }
 
     public boolean block() {
-      if (!done) {
+      if (done.compareAndSet(false, true)) {
         result = operation.get();
-        done = true;
       }
       return true;
     }
 
     public boolean isReleasable() {
-      return done;
+      return done.get();
     }
 
     public T getResult() {
