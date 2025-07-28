@@ -72,22 +72,28 @@ public final class RegexUtils {
   private static final int MAX_REGEX_THREADS = Math.max(4, Runtime.getRuntime().availableProcessors() * 2);
   private static final int QUEUE_MULTIPLIER = 100;
 
-  private static final ExecutorService REGEX_EXECUTOR_SERVICE = new ThreadPoolExecutor(
-      MAX_REGEX_THREADS,               // corePoolSize = max. Core threads are kept alive (they only time out if allowCoreThreadTimeOut(true) is ever enabled, which we do NOT).
-      MAX_REGEX_THREADS,               // maximumPoolSize
-      60L, TimeUnit.SECONDS,           // idle thread keep-alive (threads are daemon)
-      new LinkedBlockingQueue<>(MAX_REGEX_THREADS * QUEUE_MULTIPLIER), // bounded queue
-      new ThreadFactory() {
-        private final AtomicInteger idx = new AtomicInteger();
+  private static final ExecutorService REGEX_EXECUTOR_SERVICE;
 
-        @Override
-        public Thread newThread(Runnable r) {
-          Thread t = new Thread(r, "regex-util-" + idx.incrementAndGet());
-          t.setDaemon(true); // ensure stuck threads don't block JVM shutdown
-          return t;
-        }
-      }, new ThreadPoolExecutor.AbortPolicy()     // reject when saturated; surfaces back to caller
-  );
+  static {
+    ThreadPoolExecutor exec = new ThreadPoolExecutor(
+        MAX_REGEX_THREADS,               // corePoolSize = max. Core threads stay alive.
+        MAX_REGEX_THREADS,               // maximumPoolSize
+        60L, TimeUnit.SECONDS,           // idle thread keep-alive for (non-core) threads – none in this config.
+        new LinkedBlockingQueue<>(MAX_REGEX_THREADS * QUEUE_MULTIPLIER), // bounded queue
+        new ThreadFactory() {
+          private final AtomicInteger idx = new AtomicInteger();
+
+          @Override
+          public Thread newThread(Runnable r) {
+            Thread t = new Thread(r, "regex-util-" + idx.incrementAndGet());
+            t.setDaemon(true); // ensure stuck threads don't block JVM shutdown
+            return t;
+          }
+        }, new ThreadPoolExecutor.AbortPolicy()); // reject when saturated; surfaces back to caller
+
+    exec.allowCoreThreadTimeOut(false); // Explicitly ensure core threads never time out.
+    REGEX_EXECUTOR_SERVICE = exec;
+  }
 
   // Guard against duplicate shutdown-hook registration in environments that may reload classes
   // (e.g. some application servers, unit-test frameworks with custom ClassLoaders). The JVM
@@ -185,6 +191,9 @@ public final class RegexUtils {
 
     String currentResult = input;
     for (Map.Entry<Pattern, String> entry : replacements.entrySet()) {
+      if (entry.getKey() == null) {
+        throw new IllegalArgumentException("Pattern map contains null key");
+      }
       final String currentInput = currentResult;
       currentResult = executeOperation(
           () -> entry.getKey().matcher(currentInput).replaceAll(entry.getValue()),
