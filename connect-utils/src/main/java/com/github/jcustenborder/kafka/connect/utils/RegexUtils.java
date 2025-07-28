@@ -109,7 +109,7 @@ public final class RegexUtils {
     if (SHUTDOWN_HOOK_ADDED.compareAndSet(false, true)) {
       try {
         Runtime.getRuntime().addShutdownHook(new Thread(
-            () -> REGEX_EXECUTOR_SERVICE.shutdownNow(),
+            REGEX_EXECUTOR_SERVICE::shutdownNow,
             "regex-util-shutdown"));
       } catch (SecurityException se) {
         // SecurityManager denied adding the hook; resource cleanup on JVM exit is not guaranteed.
