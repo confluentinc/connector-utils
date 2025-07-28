@@ -22,25 +22,26 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import java.util.Collections;
 import java.util.Arrays;
 import java.util.List;
 
+import org.junit.jupiter.api.Test;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class RegexUtilsTest {
     private static final long TIMEOUT_MS = 100;
     private static final long LONG_TIMEOUT_MS = 1000;
-    
+
     // Test string constants
     private static final String HELLO_WORLD = "hello world";
     private static final String HELLO = "hello";
     private static final String HELLO_WORLD_TITLE_CASE = "Hello World";
-    
+
     // ReDoS pattern constant
     private static final String REDOS_PATTERN = "(a+)+";
 
@@ -52,14 +53,21 @@ class RegexUtilsTest {
             List<String> replacements,
             String expectedOutput,
             boolean shouldTimeout) throws InterruptedException, ExecutionException, TimeoutException {
-        
+
         Map<Pattern, String> patternMap = new HashMap<>();
         for (int i = 0; i < patterns.size(); i++) {
-            patternMap.put(Pattern.compile(patterns.get(i)), replacements.get(i));
+            Pattern p = patterns.get(i) == null ? null : Pattern.compile(patterns.get(i));
+            patternMap.put(p, replacements.get(i));
         }
-        
+
+        if (patterns.contains(null)) {
+            assertThrows(IllegalArgumentException.class, () ->
+                RegexUtils.replaceAll(input, patternMap, TIMEOUT_MS));
+            return;
+        }
+
         if (shouldTimeout) {
-            assertThrows(TimeoutException.class, () -> 
+            assertThrows(TimeoutException.class, () ->
                 RegexUtils.replaceAll(input, patternMap, TIMEOUT_MS));
         } else {
             String result = RegexUtils.replaceAll(input, patternMap, TIMEOUT_MS);
@@ -138,10 +146,16 @@ class RegexUtilsTest {
             String pattern,
             boolean expectedResult,
             boolean shouldTimeout) throws InterruptedException, ExecutionException, TimeoutException {
-        
+
+        if (pattern == null) {
+            assertThrows(IllegalArgumentException.class,
+                () -> RegexUtils.find(null, input, TIMEOUT_MS));
+            return;
+        }
+
         Pattern compiledPattern = Pattern.compile(pattern);
         if (shouldTimeout) {
-            assertThrows(TimeoutException.class, () -> 
+            assertThrows(TimeoutException.class, () ->
                 RegexUtils.find(compiledPattern, input, TIMEOUT_MS));
         } else {
             boolean result = RegexUtils.find(compiledPattern, input, LONG_TIMEOUT_MS);
@@ -185,10 +199,16 @@ class RegexUtilsTest {
             String pattern,
             boolean expectedResult,
             boolean shouldTimeout) throws InterruptedException, ExecutionException, TimeoutException {
-        
+
+        if (pattern == null) {
+            assertThrows(IllegalArgumentException.class,
+                () -> RegexUtils.matches(null, input, TIMEOUT_MS));
+            return;
+        }
+
         Pattern compiledPattern = Pattern.compile(pattern);
         if (shouldTimeout) {
-            assertThrows(TimeoutException.class, () -> 
+            assertThrows(TimeoutException.class, () ->
                 RegexUtils.matches(compiledPattern, input, TIMEOUT_MS));
         } else {
             boolean result = RegexUtils.matches(compiledPattern, input, LONG_TIMEOUT_MS);
@@ -224,4 +244,48 @@ class RegexUtilsTest {
             )
         );
     }
-} 
+
+    // Demonstrates fork-join pool starvation when blocking tasks exhaust the pool
+    @Test
+    void testForkJoinPoolStarvationDemonstration() {
+        final int parallelism = 1; // tiny pool to reproduce quickly
+        ForkJoinPool pool = new ForkJoinPool(parallelism);
+
+        // Saturate pool with blocking managedBlock tasks
+        for (int i = 0; i < parallelism; i++) {
+            pool.submit(() -> {
+                try {
+                    ForkJoinPool.managedBlock(new ForkJoinPool.ManagedBlocker() {
+                        @Override
+                        public boolean block() throws InterruptedException {
+                            Thread.sleep(5_000); // hold thread for 5s
+                            return true;
+                        }
+
+                        @Override
+                        public boolean isReleasable() {
+                            return false; // never releasable during test window
+                        }
+                    });
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+        }
+
+        // Lightweight task that should finish instantly but will starve
+        CompletableFuture<String> quickTask = CompletableFuture.supplyAsync(() -> "done", pool);
+
+        assertThrows(TimeoutException.class, () -> quickTask.get(200, TimeUnit.MILLISECONDS));
+
+        // Ensure RegexUtils still works using its dedicated executor
+        assertDoesNotThrow(() -> {
+            Pattern p = Pattern.compile("a");
+            boolean result = RegexUtils.matches(p, "a", 100);
+            assertTrue(result);
+        });
+
+        pool.shutdownNow();
+    }
+}
+// CI trigger: no-op change
