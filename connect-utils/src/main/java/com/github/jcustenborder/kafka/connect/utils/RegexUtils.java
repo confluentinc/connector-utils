@@ -68,8 +68,13 @@ public final class RegexUtils {
     // Prevent instantiation
   }
 
-  // Dedicated daemon-thread pool to isolate regex execution from the common ForkJoinPool.
+  // Thread-pool sizing strategy:
+  //   • At least 4 threads – so even on small dev boxes we can run a couple of regexes in parallel.
+  //   • 2 × CPU cores – on larger boxes we scale with available parallelism but stay bounded.
   private static final int MAX_REGEX_THREADS = Math.max(4, Runtime.getRuntime().availableProcessors() * 2);
+
+  // Each thread gets a backlog of 100 tasks. 100 × 2×CPU is generous enough for bursty loads but
+  // still bounds memory usage; beyond this the pool will reject new submissions (AbortPolicy).
   private static final int QUEUE_MULTIPLIER = 100;
 
   private static final ExecutorService REGEX_EXECUTOR_SERVICE;
@@ -78,7 +83,7 @@ public final class RegexUtils {
     ThreadPoolExecutor exec = new ThreadPoolExecutor(
         MAX_REGEX_THREADS,               // corePoolSize = max. Core threads stay alive.
         MAX_REGEX_THREADS,               // maximumPoolSize
-        60L, TimeUnit.SECONDS,           // idle thread keep-alive for (non-core) threads – none in this config.
+        60L, TimeUnit.SECONDS,           // keep-alive for *extra* threads (irrelevant here because core == max).
         new LinkedBlockingQueue<>(MAX_REGEX_THREADS * QUEUE_MULTIPLIER), // bounded queue
         new ThreadFactory() {
           private final AtomicInteger idx = new AtomicInteger();
