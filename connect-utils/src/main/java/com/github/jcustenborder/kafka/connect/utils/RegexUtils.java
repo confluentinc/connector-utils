@@ -75,6 +75,14 @@ public final class RegexUtils {
     }
   });
 
+  // Ensure the pool is cleaned up on JVM shutdown (primarily for environments
+  // that reload classes or run short-lived JVMs).
+  static {
+    Runtime.getRuntime().addShutdownHook(new Thread(
+        () -> REGEX_EXECUTOR_SERVICE.shutdownNow(),
+        "regex-util-shutdown"));
+  }
+
   private static class RegexExecutor<T> implements ForkJoinPool.ManagedBlocker {
     private final Supplier<T> operation;
     private final AtomicBoolean done = new AtomicBoolean();
