@@ -31,6 +31,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Utility class for performing regex operations with timeout protection against ReDoS attacks.
@@ -60,6 +62,7 @@ import java.util.function.Supplier;
  * OWASP ReDoS</a></p>
  */
 public final class RegexUtils {
+  private static final Logger log = LoggerFactory.getLogger(RegexUtils.class);
   private RegexUtils() {
     // Prevent instantiation
   }
@@ -69,7 +72,7 @@ public final class RegexUtils {
   private static final int QUEUE_MULTIPLIER = 100;
 
   private static final ExecutorService REGEX_EXECUTOR_SERVICE = new ThreadPoolExecutor(
-      MAX_REGEX_THREADS,               // corePoolSize = max → fixed-size bounded pool
+      MAX_REGEX_THREADS,               // corePoolSize = max. Core threads never timeout, so pool size is effectively fixed.
       MAX_REGEX_THREADS,               // maximumPoolSize
       60L, TimeUnit.SECONDS,           // idle thread keep-alive (threads are daemon)
       new LinkedBlockingQueue<>(MAX_REGEX_THREADS * QUEUE_MULTIPLIER), // bounded queue
@@ -97,8 +100,9 @@ public final class RegexUtils {
         Runtime.getRuntime().addShutdownHook(new Thread(
             () -> REGEX_EXECUTOR_SERVICE.shutdownNow(),
             "regex-util-shutdown"));
-      } catch (SecurityException ignored) {
-        // SecurityManager denied adding the hook; safe to proceed without it.
+      } catch (SecurityException se) {
+        // SecurityManager denied adding the hook; resource cleanup on JVM exit is not guaranteed.
+        log.warn("Unable to register shutdown hook; resources may not be cleaned up on JVM exit", se);
       }
     }
   }
@@ -161,9 +165,10 @@ public final class RegexUtils {
    * @param replacements The regex operation to perform
    * @param timeoutMs    The timeout in milliseconds
    * @return The result of the operation
-   * @throws InterruptedException if the current thread is interrupted
-   * @throws ExecutionException   if the operation throws an exception
-   * @throws TimeoutException     if the operation exceeds the specified timeout
+   * @throws InterruptedException       if the current thread is interrupted
+   * @throws ExecutionException         if the operation throws an exception
+   * @throws TimeoutException           if the operation exceeds the specified timeout
+   * @throws java.util.concurrent.RejectedExecutionException if the internal pool is saturated
    */
   public static String replaceAll(
       String input,
@@ -196,9 +201,10 @@ public final class RegexUtils {
    * @param input     The input string
    * @param timeoutMs The timeout in milliseconds
    * @return true if the pattern is found, false otherwise
-   * @throws InterruptedException if the current thread is interrupted
-   * @throws ExecutionException   if the operation throws an exception
-   * @throws TimeoutException     if the operation exceeds the specified timeout
+   * @throws InterruptedException       if the current thread is interrupted
+   * @throws ExecutionException         if the operation throws an exception
+   * @throws TimeoutException           if the operation exceeds the specified timeout
+   * @throws java.util.concurrent.RejectedExecutionException if the internal pool is saturated
    */
   public static boolean find(
       Pattern pattern,
@@ -224,9 +230,10 @@ public final class RegexUtils {
    * @param input     The input string
    * @param timeoutMs The timeout in milliseconds
    * @return true if the pattern matches the entire input, false otherwise
-   * @throws InterruptedException if the current thread is interrupted
-   * @throws ExecutionException   if the operation throws an exception
-   * @throws TimeoutException     if the operation exceeds the specified timeout
+   * @throws InterruptedException       if the current thread is interrupted
+   * @throws ExecutionException         if the operation throws an exception
+   * @throws TimeoutException           if the operation exceeds the specified timeout
+   * @throws java.util.concurrent.RejectedExecutionException if the internal pool is saturated
    */
   public static boolean matches(
       Pattern pattern,
