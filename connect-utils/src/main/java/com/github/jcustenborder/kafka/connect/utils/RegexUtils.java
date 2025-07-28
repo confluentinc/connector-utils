@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.regex.Pattern;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
@@ -72,7 +73,7 @@ public final class RegexUtils {
   private static final int QUEUE_MULTIPLIER = 100;
 
   private static final ExecutorService REGEX_EXECUTOR_SERVICE = new ThreadPoolExecutor(
-      MAX_REGEX_THREADS,               // corePoolSize = max. Core threads never time out (unless allowCoreThreadTimeOut is enabled), so pool size is effectively fixed.
+      MAX_REGEX_THREADS,               // corePoolSize = max. Core threads are kept alive (they only time out if allowCoreThreadTimeOut(true) is ever enabled, which we do NOT).
       MAX_REGEX_THREADS,               // maximumPoolSize
       60L, TimeUnit.SECONDS,           // idle thread keep-alive (threads are daemon)
       new LinkedBlockingQueue<>(MAX_REGEX_THREADS * QUEUE_MULTIPLIER), // bounded queue
