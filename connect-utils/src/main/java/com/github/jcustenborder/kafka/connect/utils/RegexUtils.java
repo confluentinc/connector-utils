@@ -22,7 +22,8 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -64,7 +65,14 @@ public final class RegexUtils {
   }
 
   // Dedicated daemon-thread pool to isolate regex execution from the common ForkJoinPool.
-  private static final ExecutorService REGEX_EXECUTOR_SERVICE = Executors.newCachedThreadPool(new ThreadFactory() {
+  private static final int MAX_REGEX_THREADS = Math.max(4, Runtime.getRuntime().availableProcessors() * 2);
+
+  private static final ExecutorService REGEX_EXECUTOR_SERVICE = new ThreadPoolExecutor(
+      MAX_REGEX_THREADS,               // corePoolSize
+      MAX_REGEX_THREADS,               // maximumPoolSize
+      60L, TimeUnit.SECONDS,           // idle thread keep-alive
+      new LinkedBlockingQueue<>(MAX_REGEX_THREADS * 100), // bounded queue to avoid OOM
+      new ThreadFactory() {
     private final AtomicInteger idx = new AtomicInteger();
 
     @Override
@@ -73,7 +81,8 @@ public final class RegexUtils {
       t.setDaemon(true); // ensure stuck threads don't block JVM shutdown
       return t;
     }
-  });
+  }, new ThreadPoolExecutor.DiscardPolicy()  // silently drop excess submissions when saturated
+  );
 
   // Guard against duplicate shutdown-hook registration in environments that may reload classes
   // (e.g. some application servers, unit-test frameworks with custom ClassLoaders). The JVM
@@ -83,9 +92,13 @@ public final class RegexUtils {
 
   static {
     if (SHUTDOWN_HOOK_ADDED.compareAndSet(false, true)) {
-      Runtime.getRuntime().addShutdownHook(new Thread(
-          () -> REGEX_EXECUTOR_SERVICE.shutdownNow(),
-          "regex-util-shutdown"));
+      try {
+        Runtime.getRuntime().addShutdownHook(new Thread(
+            () -> REGEX_EXECUTOR_SERVICE.shutdownNow(),
+            "regex-util-shutdown"));
+      } catch (SecurityException ignored) {
+        // SecurityManager denied adding the hook; safe to proceed without it.
+      }
     }
   }
 
