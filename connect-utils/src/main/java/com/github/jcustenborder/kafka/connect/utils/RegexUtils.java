@@ -72,7 +72,7 @@ public final class RegexUtils {
   private static final int QUEUE_MULTIPLIER = 100;
 
   private static final ExecutorService REGEX_EXECUTOR_SERVICE = new ThreadPoolExecutor(
-      MAX_REGEX_THREADS,               // corePoolSize = max. Core threads never timeout, so pool size is effectively fixed.
+      MAX_REGEX_THREADS,               // corePoolSize = max. Core threads never time out (unless allowCoreThreadTimeOut is enabled), so pool size is effectively fixed.
       MAX_REGEX_THREADS,               // maximumPoolSize
       60L, TimeUnit.SECONDS,           // idle thread keep-alive (threads are daemon)
       new LinkedBlockingQueue<>(MAX_REGEX_THREADS * QUEUE_MULTIPLIER), // bounded queue
@@ -168,7 +168,7 @@ public final class RegexUtils {
    * @throws InterruptedException       if the current thread is interrupted
    * @throws ExecutionException         if the operation throws an exception
    * @throws TimeoutException           if the operation exceeds the specified timeout
-   * @throws java.util.concurrent.RejectedExecutionException if the internal pool is saturated
+   * @throws RejectedExecutionException if the internal pool is saturated
    */
   public static String replaceAll(
       String input,
@@ -204,7 +204,7 @@ public final class RegexUtils {
    * @throws InterruptedException       if the current thread is interrupted
    * @throws ExecutionException         if the operation throws an exception
    * @throws TimeoutException           if the operation exceeds the specified timeout
-   * @throws java.util.concurrent.RejectedExecutionException if the internal pool is saturated
+   * @throws RejectedExecutionException if the internal pool is saturated
    */
   public static boolean find(
       Pattern pattern,
@@ -233,7 +233,7 @@ public final class RegexUtils {
    * @throws InterruptedException       if the current thread is interrupted
    * @throws ExecutionException         if the operation throws an exception
    * @throws TimeoutException           if the operation exceeds the specified timeout
-   * @throws java.util.concurrent.RejectedExecutionException if the internal pool is saturated
+   * @throws RejectedExecutionException if the internal pool is saturated
    */
   public static boolean matches(
       Pattern pattern,
