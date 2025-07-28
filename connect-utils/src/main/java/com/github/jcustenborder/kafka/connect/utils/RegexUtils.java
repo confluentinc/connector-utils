@@ -24,6 +24,7 @@ import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
@@ -63,11 +64,11 @@ public final class RegexUtils {
 
   // Dedicated daemon-thread pool to isolate regex execution from the common ForkJoinPool.
   private static final ExecutorService REGEX_EXECUTOR_SERVICE = Executors.newCachedThreadPool(new ThreadFactory() {
-    private int idx = 0;
+    private final AtomicInteger idx = new AtomicInteger();
 
     @Override
     public Thread newThread(Runnable r) {
-      Thread t = new Thread(r, "regex-util-" + (++idx));
+      Thread t = new Thread(r, "regex-util-" + idx.incrementAndGet());
       t.setDaemon(true); // ensure stuck threads don't block JVM shutdown
       return t;
     }
