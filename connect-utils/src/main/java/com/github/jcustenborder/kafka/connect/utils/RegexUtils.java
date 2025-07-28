@@ -66,22 +66,23 @@ public final class RegexUtils {
 
   // Dedicated daemon-thread pool to isolate regex execution from the common ForkJoinPool.
   private static final int MAX_REGEX_THREADS = Math.max(4, Runtime.getRuntime().availableProcessors() * 2);
+  private static final int QUEUE_MULTIPLIER = 100;
 
   private static final ExecutorService REGEX_EXECUTOR_SERVICE = new ThreadPoolExecutor(
-      MAX_REGEX_THREADS,               // corePoolSize
+      MAX_REGEX_THREADS,               // corePoolSize = max → fixed-size bounded pool
       MAX_REGEX_THREADS,               // maximumPoolSize
-      60L, TimeUnit.SECONDS,           // idle thread keep-alive
-      new LinkedBlockingQueue<>(MAX_REGEX_THREADS * 100), // bounded queue to avoid OOM
+      60L, TimeUnit.SECONDS,           // idle thread keep-alive (threads are daemon)
+      new LinkedBlockingQueue<>(MAX_REGEX_THREADS * QUEUE_MULTIPLIER), // bounded queue
       new ThreadFactory() {
-    private final AtomicInteger idx = new AtomicInteger();
+        private final AtomicInteger idx = new AtomicInteger();
 
-    @Override
-    public Thread newThread(Runnable r) {
-      Thread t = new Thread(r, "regex-util-" + idx.incrementAndGet());
-      t.setDaemon(true); // ensure stuck threads don't block JVM shutdown
-      return t;
-    }
-  }, new ThreadPoolExecutor.DiscardPolicy()  // silently drop excess submissions when saturated
+        @Override
+        public Thread newThread(Runnable r) {
+          Thread t = new Thread(r, "regex-util-" + idx.incrementAndGet());
+          t.setDaemon(true); // ensure stuck threads don't block JVM shutdown
+          return t;
+        }
+      }, new ThreadPoolExecutor.AbortPolicy()     // reject when saturated; surfaces back to caller
   );
 
   // Guard against duplicate shutdown-hook registration in environments that may reload classes
