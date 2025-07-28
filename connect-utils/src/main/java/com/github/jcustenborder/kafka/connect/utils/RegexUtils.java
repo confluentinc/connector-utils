@@ -83,7 +83,7 @@ public final class RegexUtils {
     ThreadPoolExecutor exec = new ThreadPoolExecutor(
         MAX_REGEX_THREADS,               // corePoolSize = max. Core threads stay alive.
         MAX_REGEX_THREADS,               // maximumPoolSize
-        60L, TimeUnit.SECONDS,           // keep-alive for *extra* threads (irrelevant here because core == max).
+        0L, TimeUnit.SECONDS,            // keep-alive irrelevant; pool size is fixed (core == max).
         new LinkedBlockingQueue<>(MAX_REGEX_THREADS * QUEUE_MULTIPLIER), // bounded queue
         new ThreadFactory() {
           private final AtomicInteger idx = new AtomicInteger();
@@ -96,7 +96,6 @@ public final class RegexUtils {
           }
         }, new ThreadPoolExecutor.AbortPolicy()); // reject when saturated; surfaces back to caller
 
-    exec.allowCoreThreadTimeOut(false); // Explicitly ensure core threads never time out.
     REGEX_EXECUTOR_SERVICE = exec;
   }
 
@@ -162,8 +161,8 @@ public final class RegexUtils {
     try {
       return future.get(timeoutMs, TimeUnit.MILLISECONDS);
     } catch (TimeoutException e) {
-      // Attempt to cancel. Regex operations themselves are not interruptible, but cancelling the
-      // Future prevents resource leaks and allows callers to observe completion promptly.
+      // Attempt to cancel. The regex engine itself is not interruptible, but cancelling the
+      // Future stops waiting threads and marks the task as done, preventing resource leaks.
       future.cancel(true);
       throw e;
     }
