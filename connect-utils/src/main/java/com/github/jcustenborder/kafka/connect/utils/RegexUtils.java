@@ -21,6 +21,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
@@ -58,8 +61,21 @@ public final class RegexUtils {
     // Prevent instantiation
   }
 
+  // Dedicated daemon-thread pool to isolate regex execution from the common ForkJoinPool.
+  private static final ExecutorService REGEX_EXECUTOR_SERVICE = Executors.newCachedThreadPool(new ThreadFactory() {
+    private int idx = 0;
+
+    @Override
+    public Thread newThread(Runnable r) {
+      Thread t = new Thread(r, "regex-util-" + (++idx));
+      t.setDaemon(true); // ensure stuck threads don't block JVM shutdown
+      return t;
+    }
+  });
+
   private static class RegexExecutor<T> implements ForkJoinPool.ManagedBlocker {
     private final Supplier<T> operation;
+    private volatile boolean done;
     private T result;
 
     private RegexExecutor(Supplier<T> operation) {
@@ -67,12 +83,15 @@ public final class RegexUtils {
     }
 
     public boolean block() {
-      result = operation.get();
+      if (!done) {
+        result = operation.get();
+        done = true;
+      }
       return true;
     }
 
     public boolean isReleasable() {
-      return false;
+      return done;
     }
 
     public T getResult() {
@@ -93,9 +112,15 @@ public final class RegexUtils {
         Thread.currentThread().interrupt();
         throw new CompletionException(e);
       }
-    });
+    }, REGEX_EXECUTOR_SERVICE);
 
-    return future.get(timeoutMs, TimeUnit.MILLISECONDS);
+    try {
+      return future.get(timeoutMs, TimeUnit.MILLISECONDS);
+    } catch (TimeoutException e) {
+      // Attempt to cancel; regex operations aren't interruptible but avoids leaking the Future
+      future.cancel(true);
+      throw e;
+    }
   }
 
   /**
@@ -149,6 +174,9 @@ public final class RegexUtils {
       Pattern pattern,
       String input,
       long timeoutMs) throws InterruptedException, ExecutionException, TimeoutException {
+    if (pattern == null) {
+      throw new IllegalArgumentException("pattern cannot be null");
+    }
     if (input == null) {
       return false;
     }
@@ -174,6 +202,9 @@ public final class RegexUtils {
       Pattern pattern,
       String input,
       long timeoutMs) throws InterruptedException, ExecutionException, TimeoutException {
+    if (pattern == null) {
+      throw new IllegalArgumentException("pattern cannot be null");
+    }
     if (input == null) {
       return false;
     }
@@ -182,4 +213,4 @@ public final class RegexUtils {
         timeoutMs
     );
   }
-} 
+}
