@@ -21,6 +21,12 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
@@ -33,19 +39,19 @@ import java.util.function.Supplier;
  * <p><b>Design Decision:</b></p>
  * <ul>
  *   <li>
- *     <b>Custom ExecutorService:</b> Considered using a dedicated ExecutorService to manage
- *     threads for regex operations. However, this would require explicit lifecycle management
- *     (shutdown, resource cleanup) and would complicate usage for consumers of this utility class.
+ *     <b>Dedicated ExecutorService:</b> All regex work is executed on a private, cached thread
+ *     pool whose threads are marked <i>daemon</i>.  A hung regex can only consume a thread from
+ *     this pool and will never starve the JVM&rsquo;s shared thread pools.
  *   </li>
  *   <li>
- *     <b>Common Thread Pool:</b> Using the common thread pool (e.g., via CompletableFuture) was
- *     considered, but multiple blocking operations might exhaust the common ForkJoinPool for other users.
+ *     <b>ManagedBlocker:</b> Each operation is wrapped in a custom
+ *     {@link java.util.concurrent.ForkJoinPool.ManagedBlocker} so the pool can compensate for the
+ *     blocking call without exhausting its parallelism.
  *   </li>
  *   <li>
- *     <b>ManagedBlocker:</b> The chosen approach is to use a custom ForkJoinPool.ManagedBlocker.
- *     This allows for dispatching blocking operations without exhausting the common ForkJoinPool,
- *     while avoiding the complexity of explicit thread pool management. This approach provides
- *     a balance between safety, performance, and ease of use for consumers.
+ *     <b>Timeout &amp; Cleanup:</b> Callers supply a timeout.  On expiry the
+ *     {@link CompletableFuture} is cancelled, ensuring the caller never hangs while any leaked
+ *     thread remains confined to the private pool.
  *   </li>
  * </ul>
  *
@@ -58,8 +64,47 @@ public final class RegexUtils {
     // Prevent instantiation
   }
 
+  // Dedicated daemon-thread pool to isolate regex execution from the common ForkJoinPool.
+  private static final int MAX_REGEX_THREADS = Math.max(4, Runtime.getRuntime().availableProcessors() * 2);
+
+  private static final ExecutorService REGEX_EXECUTOR_SERVICE = new ThreadPoolExecutor(
+      MAX_REGEX_THREADS,               // corePoolSize
+      MAX_REGEX_THREADS,               // maximumPoolSize
+      60L, TimeUnit.SECONDS,           // idle thread keep-alive
+      new LinkedBlockingQueue<>(MAX_REGEX_THREADS * 100), // bounded queue to avoid OOM
+      new ThreadFactory() {
+    private final AtomicInteger idx = new AtomicInteger();
+
+    @Override
+    public Thread newThread(Runnable r) {
+      Thread t = new Thread(r, "regex-util-" + idx.incrementAndGet());
+      t.setDaemon(true); // ensure stuck threads don't block JVM shutdown
+      return t;
+    }
+  }, new ThreadPoolExecutor.DiscardPolicy()  // silently drop excess submissions when saturated
+  );
+
+  // Guard against duplicate shutdown-hook registration in environments that may reload classes
+  // (e.g. some application servers, unit-test frameworks with custom ClassLoaders). The JVM
+  // runs class initializers once per ClassLoader, so this is mainly defensive, but it ensures we
+  // never register multiple identical hooks within the same ClassLoader.
+  private static final AtomicBoolean SHUTDOWN_HOOK_ADDED = new AtomicBoolean();
+
+  static {
+    if (SHUTDOWN_HOOK_ADDED.compareAndSet(false, true)) {
+      try {
+        Runtime.getRuntime().addShutdownHook(new Thread(
+            () -> REGEX_EXECUTOR_SERVICE.shutdownNow(),
+            "regex-util-shutdown"));
+      } catch (SecurityException ignored) {
+        // SecurityManager denied adding the hook; safe to proceed without it.
+      }
+    }
+  }
+
   private static class RegexExecutor<T> implements ForkJoinPool.ManagedBlocker {
     private final Supplier<T> operation;
+    private final AtomicBoolean done = new AtomicBoolean();
     private T result;
 
     private RegexExecutor(Supplier<T> operation) {
@@ -67,12 +112,14 @@ public final class RegexUtils {
     }
 
     public boolean block() {
-      result = operation.get();
+      if (done.compareAndSet(false, true)) {
+        result = operation.get();
+      }
       return true;
     }
 
     public boolean isReleasable() {
-      return false;
+      return done.get();
     }
 
     public T getResult() {
@@ -93,9 +140,16 @@ public final class RegexUtils {
         Thread.currentThread().interrupt();
         throw new CompletionException(e);
       }
-    });
+    }, REGEX_EXECUTOR_SERVICE);
 
-    return future.get(timeoutMs, TimeUnit.MILLISECONDS);
+    try {
+      return future.get(timeoutMs, TimeUnit.MILLISECONDS);
+    } catch (TimeoutException e) {
+      // Attempt to cancel. Regex operations themselves are not interruptible, but cancelling the
+      // Future prevents resource leaks and allows callers to observe completion promptly.
+      future.cancel(true);
+      throw e;
+    }
   }
 
   /**
@@ -149,6 +203,9 @@ public final class RegexUtils {
       Pattern pattern,
       String input,
       long timeoutMs) throws InterruptedException, ExecutionException, TimeoutException {
+    if (pattern == null) {
+      throw new IllegalArgumentException("pattern cannot be null");
+    }
     if (input == null) {
       return false;
     }
@@ -174,6 +231,9 @@ public final class RegexUtils {
       Pattern pattern,
       String input,
       long timeoutMs) throws InterruptedException, ExecutionException, TimeoutException {
+    if (pattern == null) {
+      throw new IllegalArgumentException("pattern cannot be null");
+    }
     if (input == null) {
       return false;
     }
@@ -182,4 +242,4 @@ public final class RegexUtils {
         timeoutMs
     );
   }
-} 
+}
