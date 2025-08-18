@@ -288,4 +288,3 @@ class RegexUtilsTest {
         pool.shutdownNow();
     }
 }
-// CI trigger: no-op change
