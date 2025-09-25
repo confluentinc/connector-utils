@@ -36,7 +36,7 @@ public class StructTemplate {
   final StringTemplateLoader loader;
 
   public StructTemplate() {
-    this.configuration = new Configuration(Configuration.getVersion());
+    this.configuration = new Configuration(Configuration.VERSION_2_3_31);
     this.loader = new StringTemplateLoader();
     this.configuration.setTemplateLoader(this.loader);
     this.configuration.setDefaultEncoding("UTF-8");
