@@ -73,6 +73,11 @@
     <properties>
         <kafka.version>3.9.0</kafka.version>
         <guava.version>31.1-jre</guava.version>
+<!--
+    For upgrading freemarker.version ensure to update
+    om.github.jcustenborder.kafka.connect.utils.template.StructTemplate.configuration
+    version also to updated version
+-->
         <freemarker.version>2.3.31</freemarker.version>
         <jackson.version>2.12.6.20220326</jackson.version>
         <reflections.version>0.9.10</reflections.version>
