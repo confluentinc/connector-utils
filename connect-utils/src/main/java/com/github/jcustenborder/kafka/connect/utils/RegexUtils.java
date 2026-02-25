@@ -59,10 +59,15 @@ public final class RegexUtils {
    * deadline is exceeded, interrupting the regex engine mid-execution.
    */
   private static class TimeoutCharSequence implements CharSequence {
+    private static final int CHECK_INTERVAL = 64;
     private final CharSequence inner;
     private final long deadlineNanos;
+    private int accessCount;
 
     TimeoutCharSequence(CharSequence inner, long timeoutMs) {
+      if (timeoutMs < 0) {
+        throw new IllegalArgumentException("timeoutMs must be non-negative, got: " + timeoutMs);
+      }
       this.inner = inner;
       this.deadlineNanos = System.nanoTime()
           + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
@@ -70,7 +75,8 @@ public final class RegexUtils {
 
     @Override
     public char charAt(int index) {
-      if (System.nanoTime() > deadlineNanos) {
+      if ((++accessCount & (CHECK_INTERVAL - 1)) == 0
+          && System.nanoTime() > deadlineNanos) {
         throw new RuntimeException(
             new TimeoutException("Regex operation timed out"));
       }
