@@ -40,8 +40,9 @@ class RegexUtilsTest {
     private static final String HELLO = "hello";
     private static final String HELLO_WORLD_TITLE_CASE = "Hello World";
 
-    // ReDoS pattern constant
-    private static final String REDOS_PATTERN = "(a+)+";
+    // ReDoS: (.*a){N} against "aaa...b" causes exponential backtracking in Java's regex engine
+    private static final String REDOS_INPUT = String.join("", Collections.nCopies(25, "a")) + "b";
+    private static final String REDOS_PATTERN = "(.*a){25}";
 
     @MethodSource("providerForTestReplaceAll")
     @ParameterizedTest
@@ -118,14 +119,21 @@ class RegexUtilsTest {
             Arguments.of(null, Arrays.asList("test"), Arrays.asList("replacement"), null, false),
             // Empty patterns test
             Arguments.of("test string", Arrays.asList(), Arrays.asList(), "test string", false),
-            // ReDoS protection tests
-            // Test 1: Catastrophic backtracking with (a+)+
+            // ReDoS protection tests — (.*a){N} causes exponential backtracking
             Arguments.of(
-                String.join("", Collections.nCopies(1000, "a")),
-                Arrays.asList(String.join("", Collections.nCopies(1000, REDOS_PATTERN))),
+                REDOS_INPUT,
+                Arrays.asList(REDOS_PATTERN),
                 Arrays.asList("replaced"),
-                null,  // Expected output doesn't matter as it should timeout
+                null,
                 true
+            ),
+            // Test 4: OpenSearch wrap pattern (non-pathological, should NOT timeout)
+            Arguments.of(
+                "{\"field\":\"value\",\"nested\":{\"key\":123}}",
+                Arrays.asList("^(?s)(.*)$"),
+                Arrays.asList("{\"doc\": $1, \"doc_as_upsert\": true}"),
+                "{\"doc\": {\"field\":\"value\",\"nested\":{\"key\":123}}, \"doc_as_upsert\": true}",
+                false
             )
         );
     }
@@ -166,14 +174,8 @@ class RegexUtilsTest {
             Arguments.of(HELLO + " " + HELLO + " world", HELLO, true, false),
             // Special characters test
             Arguments.of("$100.50", "\\$\\d+\\.\\d+", true, false),
-            // ReDoS protection tests
-            // Test 1: Catastrophic backtracking with (a+)+
-            Arguments.of(
-                String.join("", Collections.nCopies(1000, "a")),
-                String.join("", Collections.nCopies(1000, REDOS_PATTERN)),
-                false,
-                true
-            )
+            // ReDoS protection test — (.*a){N} causes exponential backtracking
+            Arguments.of(REDOS_INPUT, REDOS_PATTERN, false, true)
         );
     }
 
@@ -213,14 +215,8 @@ class RegexUtilsTest {
             Arguments.of(HELLO_WORLD, "^" + HELLO_WORLD + "$", true, false),
             // Special characters test
             Arguments.of("$100.50", "^\\$\\d+\\.\\d+$", true, false),
-            // ReDoS protection tests
-            // Test 1: Catastrophic backtracking with (a+)+
-            Arguments.of(
-                String.join("", Collections.nCopies(1000, "a")),
-                String.join("", Collections.nCopies(1000, REDOS_PATTERN)),
-                false,
-                true
-            )
+            // ReDoS protection test — (.*a){N} causes exponential backtracking
+            Arguments.of(REDOS_INPUT, REDOS_PATTERN, false, true)
         );
     }
 }
