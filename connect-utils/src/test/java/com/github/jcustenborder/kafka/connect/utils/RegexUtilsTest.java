@@ -22,7 +22,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -35,12 +34,12 @@ import static org.junit.jupiter.api.Assertions.*;
 class RegexUtilsTest {
     private static final long TIMEOUT_MS = 100;
     private static final long LONG_TIMEOUT_MS = 1000;
-    
+
     // Test string constants
     private static final String HELLO_WORLD = "hello world";
     private static final String HELLO = "hello";
     private static final String HELLO_WORLD_TITLE_CASE = "Hello World";
-    
+
     // ReDoS pattern constant
     private static final String REDOS_PATTERN = "(a+)+";
 
@@ -51,15 +50,15 @@ class RegexUtilsTest {
             List<String> patterns,
             List<String> replacements,
             String expectedOutput,
-            boolean shouldTimeout) throws InterruptedException, ExecutionException, TimeoutException {
-        
+            boolean shouldTimeout) throws TimeoutException {
+
         Map<Pattern, String> patternMap = new HashMap<>();
         for (int i = 0; i < patterns.size(); i++) {
             patternMap.put(Pattern.compile(patterns.get(i)), replacements.get(i));
         }
-        
+
         if (shouldTimeout) {
-            assertThrows(TimeoutException.class, () -> 
+            assertThrows(TimeoutException.class, () ->
                 RegexUtils.replaceAll(input, patternMap, TIMEOUT_MS));
         } else {
             String result = RegexUtils.replaceAll(input, patternMap, TIMEOUT_MS);
@@ -137,11 +136,11 @@ class RegexUtilsTest {
             String input,
             String pattern,
             boolean expectedResult,
-            boolean shouldTimeout) throws InterruptedException, ExecutionException, TimeoutException {
-        
+            boolean shouldTimeout) throws TimeoutException {
+
         Pattern compiledPattern = Pattern.compile(pattern);
         if (shouldTimeout) {
-            assertThrows(TimeoutException.class, () -> 
+            assertThrows(TimeoutException.class, () ->
                 RegexUtils.find(compiledPattern, input, TIMEOUT_MS));
         } else {
             boolean result = RegexUtils.find(compiledPattern, input, LONG_TIMEOUT_MS);
@@ -184,11 +183,11 @@ class RegexUtilsTest {
             String input,
             String pattern,
             boolean expectedResult,
-            boolean shouldTimeout) throws InterruptedException, ExecutionException, TimeoutException {
-        
+            boolean shouldTimeout) throws TimeoutException {
+
         Pattern compiledPattern = Pattern.compile(pattern);
         if (shouldTimeout) {
-            assertThrows(TimeoutException.class, () -> 
+            assertThrows(TimeoutException.class, () ->
                 RegexUtils.matches(compiledPattern, input, TIMEOUT_MS));
         } else {
             boolean result = RegexUtils.matches(compiledPattern, input, LONG_TIMEOUT_MS);
@@ -224,4 +223,4 @@ class RegexUtilsTest {
             )
         );
     }
-} 
+}
