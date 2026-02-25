@@ -105,16 +105,11 @@ public final class RegexUtils {
       long timeoutMs,
       GuardedOperation<T> operation) throws TimeoutException {
     if (input == null) {
-      log.info("Input is null, returning default value");
       return nullDefault;
     }
-    log.info("Executing regex operation with timeout of {}ms on input of length {}",
-        timeoutMs, input.length());
     CharSequence guarded = new TimeoutCharSequence(input, timeoutMs);
     try {
-      T result = operation.execute(guarded);
-      log.info("Regex operation completed successfully");
-      return result;
+      return operation.execute(guarded);
     } catch (RuntimeException e) {
       if (e.getCause() instanceof TimeoutException) {
         log.warn("Regex operation timed out after {}ms on input of length {}",
