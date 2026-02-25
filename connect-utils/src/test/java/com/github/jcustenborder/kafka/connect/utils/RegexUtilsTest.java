@@ -22,7 +22,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -35,14 +34,15 @@ import static org.junit.jupiter.api.Assertions.*;
 class RegexUtilsTest {
     private static final long TIMEOUT_MS = 100;
     private static final long LONG_TIMEOUT_MS = 1000;
-    
+
     // Test string constants
     private static final String HELLO_WORLD = "hello world";
     private static final String HELLO = "hello";
     private static final String HELLO_WORLD_TITLE_CASE = "Hello World";
-    
-    // ReDoS pattern constant
-    private static final String REDOS_PATTERN = "(a+)+";
+
+    // ReDoS: (.*a){N} against "aaa...b" causes exponential backtracking in Java's regex engine
+    private static final String REDOS_INPUT = String.join("", Collections.nCopies(25, "a")) + "b";
+    private static final String REDOS_PATTERN = "(.*a){25}";
 
     @MethodSource("providerForTestReplaceAll")
     @ParameterizedTest
@@ -51,15 +51,15 @@ class RegexUtilsTest {
             List<String> patterns,
             List<String> replacements,
             String expectedOutput,
-            boolean shouldTimeout) throws InterruptedException, ExecutionException, TimeoutException {
-        
+            boolean shouldTimeout) throws TimeoutException {
+
         Map<Pattern, String> patternMap = new HashMap<>();
         for (int i = 0; i < patterns.size(); i++) {
             patternMap.put(Pattern.compile(patterns.get(i)), replacements.get(i));
         }
-        
+
         if (shouldTimeout) {
-            assertThrows(TimeoutException.class, () -> 
+            assertThrows(TimeoutException.class, () ->
                 RegexUtils.replaceAll(input, patternMap, TIMEOUT_MS));
         } else {
             String result = RegexUtils.replaceAll(input, patternMap, TIMEOUT_MS);
@@ -119,14 +119,21 @@ class RegexUtilsTest {
             Arguments.of(null, Arrays.asList("test"), Arrays.asList("replacement"), null, false),
             // Empty patterns test
             Arguments.of("test string", Arrays.asList(), Arrays.asList(), "test string", false),
-            // ReDoS protection tests
-            // Test 1: Catastrophic backtracking with (a+)+
+            // ReDoS protection tests — (.*a){N} causes exponential backtracking
             Arguments.of(
-                String.join("", Collections.nCopies(1000, "a")),
-                Arrays.asList(String.join("", Collections.nCopies(1000, REDOS_PATTERN))),
+                REDOS_INPUT,
+                Arrays.asList(REDOS_PATTERN),
                 Arrays.asList("replaced"),
-                null,  // Expected output doesn't matter as it should timeout
+                null,
                 true
+            ),
+            // Test 4: OpenSearch wrap pattern (non-pathological, should NOT timeout)
+            Arguments.of(
+                "{\"field\":\"value\",\"nested\":{\"key\":123}}",
+                Arrays.asList("^(?s)(.*)$"),
+                Arrays.asList("{\"doc\": $1, \"doc_as_upsert\": true}"),
+                "{\"doc\": {\"field\":\"value\",\"nested\":{\"key\":123}}, \"doc_as_upsert\": true}",
+                false
             )
         );
     }
@@ -137,11 +144,11 @@ class RegexUtilsTest {
             String input,
             String pattern,
             boolean expectedResult,
-            boolean shouldTimeout) throws InterruptedException, ExecutionException, TimeoutException {
-        
+            boolean shouldTimeout) throws TimeoutException {
+
         Pattern compiledPattern = Pattern.compile(pattern);
         if (shouldTimeout) {
-            assertThrows(TimeoutException.class, () -> 
+            assertThrows(TimeoutException.class, () ->
                 RegexUtils.find(compiledPattern, input, TIMEOUT_MS));
         } else {
             boolean result = RegexUtils.find(compiledPattern, input, LONG_TIMEOUT_MS);
@@ -167,14 +174,8 @@ class RegexUtilsTest {
             Arguments.of(HELLO + " " + HELLO + " world", HELLO, true, false),
             // Special characters test
             Arguments.of("$100.50", "\\$\\d+\\.\\d+", true, false),
-            // ReDoS protection tests
-            // Test 1: Catastrophic backtracking with (a+)+
-            Arguments.of(
-                String.join("", Collections.nCopies(1000, "a")),
-                String.join("", Collections.nCopies(1000, REDOS_PATTERN)),
-                false,
-                true
-            )
+            // ReDoS protection test — (.*a){N} causes exponential backtracking
+            Arguments.of(REDOS_INPUT, REDOS_PATTERN, false, true)
         );
     }
 
@@ -184,11 +185,11 @@ class RegexUtilsTest {
             String input,
             String pattern,
             boolean expectedResult,
-            boolean shouldTimeout) throws InterruptedException, ExecutionException, TimeoutException {
-        
+            boolean shouldTimeout) throws TimeoutException {
+
         Pattern compiledPattern = Pattern.compile(pattern);
         if (shouldTimeout) {
-            assertThrows(TimeoutException.class, () -> 
+            assertThrows(TimeoutException.class, () ->
                 RegexUtils.matches(compiledPattern, input, TIMEOUT_MS));
         } else {
             boolean result = RegexUtils.matches(compiledPattern, input, LONG_TIMEOUT_MS);
@@ -214,14 +215,8 @@ class RegexUtilsTest {
             Arguments.of(HELLO_WORLD, "^" + HELLO_WORLD + "$", true, false),
             // Special characters test
             Arguments.of("$100.50", "^\\$\\d+\\.\\d+$", true, false),
-            // ReDoS protection tests
-            // Test 1: Catastrophic backtracking with (a+)+
-            Arguments.of(
-                String.join("", Collections.nCopies(1000, "a")),
-                String.join("", Collections.nCopies(1000, REDOS_PATTERN)),
-                false,
-                true
-            )
+            // ReDoS protection test — (.*a){N} causes exponential backtracking
+            Arguments.of(REDOS_INPUT, REDOS_PATTERN, false, true)
         );
     }
-} 
+}
