@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016 Jeremy Custenborder (jcustenborder@gmail.com)
+ * Copyright the project authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.github.jcustenborder.kafka.connect.utils.errors;
+package io.confluent.kafka.connect.errors;
 
 import org.apache.kafka.connect.errors.ConnectException;
 import org.junit.jupiter.api.Test;
