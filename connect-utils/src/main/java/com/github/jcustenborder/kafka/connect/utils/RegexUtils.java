@@ -16,6 +16,8 @@
 
 package com.github.jcustenborder.kafka.connect.utils;
 
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadMXBean;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -36,10 +38,11 @@ import org.slf4j.LoggerFactory;
  * calling thread — no thread pool is required.
  * </p>
  * <p>
- * This approach was chosen over thread-pool-based timeout (e.g., {@code CompletableFuture} with
- * {@code Future.get(timeout)}) because the thread pool approach is vulnerable to pool saturation:
- * when the shared {@code ForkJoinPool} is busy, regex tasks queue up and timeout before execution
- * even begins, causing spurious failures unrelated to regex complexity.
+ * The deadline is based on <b>thread CPU time</b> ({@link ThreadMXBean#getCurrentThreadCpuTime()})
+ * rather than wall-clock time ({@code System.nanoTime()}). This ensures that only actual CPU
+ * execution counts toward the timeout, making it immune to CFS throttling pauses in
+ * containerized environments where threads may be suspended for extended periods without
+ * consuming any CPU.
  * </p>
  *
  * <p>See also:
@@ -48,20 +51,23 @@ import org.slf4j.LoggerFactory;
  */
 public final class RegexUtils {
   private static final Logger log = LoggerFactory.getLogger(RegexUtils.class);
+  private static final ThreadMXBean THREAD_MX = ManagementFactory.getThreadMXBean();
 
   private RegexUtils() {
     // Prevent instantiation
   }
 
   /**
-   * A {@link CharSequence} wrapper that enforces a time deadline on regex operations.
+   * A {@link CharSequence} wrapper that enforces a CPU-time deadline on regex operations.
+   * Uses {@link ThreadMXBean#getCurrentThreadCpuTime()} to measure only actual CPU execution,
+   * making it immune to CFS throttling pauses in containerized environments.
    * Throws a {@link RuntimeException} wrapping a {@link TimeoutException} when the
    * deadline is exceeded, interrupting the regex engine mid-execution.
    */
   private static class TimeoutCharSequence implements CharSequence {
     private static final int CHECK_INTERVAL = 64;
     private final CharSequence inner;
-    private final long deadlineNanos;
+    private final long deadlineCpuNanos;
     private int accessCount;
 
     TimeoutCharSequence(CharSequence inner, long timeoutMs) {
@@ -69,14 +75,14 @@ public final class RegexUtils {
         throw new IllegalArgumentException("timeoutMs must be non-negative, got: " + timeoutMs);
       }
       this.inner = inner;
-      this.deadlineNanos = System.nanoTime()
+      this.deadlineCpuNanos = THREAD_MX.getCurrentThreadCpuTime()
           + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
     }
 
     @Override
     public char charAt(int index) {
       if ((++accessCount & (CHECK_INTERVAL - 1)) == 0
-          && System.nanoTime() > deadlineNanos) {
+          && THREAD_MX.getCurrentThreadCpuTime() > deadlineCpuNanos) {
         throw new RuntimeException(
             new TimeoutException("Regex operation timed out"));
       }
@@ -90,7 +96,8 @@ public final class RegexUtils {
 
     @Override
     public CharSequence subSequence(int start, int end) {
-      long remainingMs = TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime());
+      long remainingMs = TimeUnit.NANOSECONDS.toMillis(
+          deadlineCpuNanos - THREAD_MX.getCurrentThreadCpuTime());
       return new TimeoutCharSequence(inner.subSequence(start, end), Math.max(remainingMs, 0));
     }
 
