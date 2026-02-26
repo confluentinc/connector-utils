@@ -72,7 +72,7 @@
     </issueManagement>
     <properties>
         <kafka.version>3.9.0</kafka.version>
-        <guava.version>31.1-jre</guava.version>
+        <guava.version>32.0.0-android</guava.version>
 <!--
     For upgrading freemarker.version ensure to update
     om.github.jcustenborder.kafka.connect.utils.template.StructTemplate.configuration
