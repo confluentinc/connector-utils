@@ -42,19 +42,6 @@ import org.slf4j.LoggerFactory;
  * the timeout starts immediately before regex execution on the calling thread — there is no
  * thread pool or task queuing where wall-clock time could advance before execution begins.
  * </p>
- * <p>
- * <b>Why not {@link java.lang.management.ThreadMXBean#getCurrentThreadCpuTime()}?</b>
- * Thread CPU time was considered as it only counts actual CPU execution (immune to CFS throttling
- * pauses). However, {@code getCurrentThreadCpuTime()} is not portable across JVM implementations:
- * it is an optional operation that may return {@code -1} when unsupported, and implementations
- * like OpenJ9 (IBM Semeru) do not support it. Additionally, even on HotSpot where it is supported,
- * it incurs ~100–500ns per call (vs ~20–30ns for {@code System.nanoTime()}) due to underlying
- * OS syscalls ({@code clock_gettime(CLOCK_THREAD_CPUTIME_ID)} on Linux,
- * {@code thread_info()} on macOS). Since the timeout runs inline on the calling thread with no
- * queuing delay, wall-clock time is sufficient — for ReDoS patterns the thread burns CPU
- * continuously so both clocks advance at the same rate, and for non-pathological patterns
- * execution completes in microseconds well within the timeout margin.
- * </p>
  *
  * <p>See also:
  * <a href="https://owasp.org/www-community/attacks/Regular_expression_Denial_of_Service_-_ReDoS">
@@ -79,8 +66,8 @@ public final class RegexUtils {
     private int accessCount;
 
     TimeoutCharSequence(CharSequence inner, long timeoutMs) {
-      if (timeoutMs < 0) {
-        throw new IllegalArgumentException("timeoutMs must be non-negative, got: " + timeoutMs);
+      if (timeoutMs <= 0) {
+        throw new IllegalArgumentException("timeoutMs must be positive, got: " + timeoutMs);
       }
       this.inner = inner;
       this.deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
@@ -88,6 +75,14 @@ public final class RegexUtils {
 
     @Override
     public char charAt(int index) {
+      // Deadline check amortized to every 64th call via bitmask.
+      // Uses System.nanoTime() rather than ThreadMXBean.getCurrentThreadCpuTime() because:
+      // - getCurrentThreadCpuTime() is not portable: it is an optional JMX operation that may
+      //   return -1, and OpenJ9 (IBM Semeru) does not support it
+      // - It incurs ~100-500ns/call (OS syscalls: clock_gettime on Linux, thread_info on macOS)
+      //   vs ~20-30ns for nanoTime()
+      // - Wall-clock time is sufficient here since the timeout starts inline on the calling
+      //   thread with no queuing delay
       if ((++accessCount & (CHECK_INTERVAL - 1)) == 0
           && System.nanoTime() > deadlineNanos) {
         throw new RuntimeException(
@@ -104,7 +99,7 @@ public final class RegexUtils {
     @Override
     public CharSequence subSequence(int start, int end) {
       long remainingMs = TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime());
-      return new TimeoutCharSequence(inner.subSequence(start, end), Math.max(remainingMs, 0));
+      return new TimeoutCharSequence(inner.subSequence(start, end), Math.max(remainingMs, 1));
     }
 
     @Override

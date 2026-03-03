@@ -32,6 +32,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
@@ -275,7 +276,8 @@ class RegexUtilsTest {
         for (Future<?> f : futures) {
             f.get();
         }
-        executor.shutdown();
+        executor.shutdownNow();
+        executor.awaitTermination(5, TimeUnit.SECONDS);
     }
 
     @Test
@@ -370,16 +372,22 @@ class RegexUtilsTest {
     // ---- Edge case tests ----
 
     @Test
-    void negativeTimeoutThrowsIllegalArgumentException() {
+    void nonPositiveTimeoutThrowsIllegalArgumentException() {
         Map<Pattern, String> replacements = new LinkedHashMap<>();
         replacements.put(Pattern.compile("test"), "replaced");
 
         assertThrows(IllegalArgumentException.class, () ->
                 RegexUtils.replaceAll("input", replacements, -1));
         assertThrows(IllegalArgumentException.class, () ->
+                RegexUtils.replaceAll("input", replacements, 0));
+        assertThrows(IllegalArgumentException.class, () ->
                 RegexUtils.find(Pattern.compile("test"), "input", -1));
         assertThrows(IllegalArgumentException.class, () ->
+                RegexUtils.find(Pattern.compile("test"), "input", 0));
+        assertThrows(IllegalArgumentException.class, () ->
                 RegexUtils.matches(Pattern.compile("test"), "input", -1));
+        assertThrows(IllegalArgumentException.class, () ->
+                RegexUtils.matches(Pattern.compile("test"), "input", 0));
     }
 
     @Test
