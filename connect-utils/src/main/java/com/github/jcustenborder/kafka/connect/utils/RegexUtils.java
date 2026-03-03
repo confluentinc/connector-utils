@@ -16,11 +16,10 @@
 
 package com.github.jcustenborder.kafka.connect.utils;
 
-import java.lang.management.ManagementFactory;
-import java.lang.management.ThreadMXBean;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
@@ -35,14 +34,26 @@ import org.slf4j.LoggerFactory;
  * Timeout enforcement is implemented using a custom {@link CharSequence} wrapper that checks
  * a deadline on every {@code charAt()} call. Since {@code java.util.regex} accesses every
  * character through this method, this provides fine-grained timeout detection that runs on the
- * calling thread — no thread pool is required.
+ * calling thread — no thread pool is required. The deadline check is amortized to every 64th
+ * {@code charAt()} call using a bitmask to minimize overhead.
  * </p>
  * <p>
- * The deadline is based on <b>thread CPU time</b> ({@link ThreadMXBean#getCurrentThreadCpuTime()})
- * rather than wall-clock time ({@code System.nanoTime()}). This ensures that only actual CPU
- * execution counts toward the timeout, making it immune to CFS throttling pauses in
- * containerized environments where threads may be suspended for extended periods without
- * consuming any CPU.
+ * The deadline uses {@code System.nanoTime()} (monotonic wall-clock time). This is safe because
+ * the timeout starts immediately before regex execution on the calling thread — there is no
+ * thread pool or task queuing where wall-clock time could advance before execution begins.
+ * </p>
+ * <p>
+ * <b>Why not {@link java.lang.management.ThreadMXBean#getCurrentThreadCpuTime()}?</b>
+ * Thread CPU time was considered as it only counts actual CPU execution (immune to CFS throttling
+ * pauses). However, {@code getCurrentThreadCpuTime()} is not portable across JVM implementations:
+ * it is an optional operation that may return {@code -1} when unsupported, and implementations
+ * like OpenJ9 (IBM Semeru) do not support it. Additionally, even on HotSpot where it is supported,
+ * it incurs ~100–500ns per call (vs ~20–30ns for {@code System.nanoTime()}) due to underlying
+ * OS syscalls ({@code clock_gettime(CLOCK_THREAD_CPUTIME_ID)} on Linux,
+ * {@code thread_info()} on macOS). Since the timeout runs inline on the calling thread with no
+ * queuing delay, wall-clock time is sufficient — for ReDoS patterns the thread burns CPU
+ * continuously so both clocks advance at the same rate, and for non-pathological patterns
+ * execution completes in microseconds well within the timeout margin.
  * </p>
  *
  * <p>See also:
@@ -51,23 +62,20 @@ import org.slf4j.LoggerFactory;
  */
 public final class RegexUtils {
   private static final Logger log = LoggerFactory.getLogger(RegexUtils.class);
-  private static final ThreadMXBean THREAD_MX = ManagementFactory.getThreadMXBean();
 
   private RegexUtils() {
     // Prevent instantiation
   }
 
   /**
-   * A {@link CharSequence} wrapper that enforces a CPU-time deadline on regex operations.
-   * Uses {@link ThreadMXBean#getCurrentThreadCpuTime()} to measure only actual CPU execution,
-   * making it immune to CFS throttling pauses in containerized environments.
+   * A {@link CharSequence} wrapper that enforces a wall-clock deadline on regex operations.
    * Throws a {@link RuntimeException} wrapping a {@link TimeoutException} when the
    * deadline is exceeded, interrupting the regex engine mid-execution.
    */
   private static class TimeoutCharSequence implements CharSequence {
     private static final int CHECK_INTERVAL = 64;
     private final CharSequence inner;
-    private final long deadlineCpuNanos;
+    private final long deadlineNanos;
     private int accessCount;
 
     TimeoutCharSequence(CharSequence inner, long timeoutMs) {
@@ -75,14 +83,13 @@ public final class RegexUtils {
         throw new IllegalArgumentException("timeoutMs must be non-negative, got: " + timeoutMs);
       }
       this.inner = inner;
-      this.deadlineCpuNanos = THREAD_MX.getCurrentThreadCpuTime()
-          + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
+      this.deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
     }
 
     @Override
     public char charAt(int index) {
       if ((++accessCount & (CHECK_INTERVAL - 1)) == 0
-          && THREAD_MX.getCurrentThreadCpuTime() > deadlineCpuNanos) {
+          && System.nanoTime() > deadlineNanos) {
         throw new RuntimeException(
             new TimeoutException("Regex operation timed out"));
       }
@@ -96,8 +103,7 @@ public final class RegexUtils {
 
     @Override
     public CharSequence subSequence(int start, int end) {
-      long remainingMs = TimeUnit.NANOSECONDS.toMillis(
-          deadlineCpuNanos - THREAD_MX.getCurrentThreadCpuTime());
+      long remainingMs = TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime());
       return new TimeoutCharSequence(inner.subSequence(start, end), Math.max(remainingMs, 0));
     }
 
@@ -107,22 +113,17 @@ public final class RegexUtils {
     }
   }
 
-  @FunctionalInterface
-  private interface GuardedOperation<T> {
-    T execute(CharSequence guarded);
-  }
-
   private static <T> T executeWithTimeout(
       String input,
       T nullDefault,
       long timeoutMs,
-      GuardedOperation<T> operation) throws TimeoutException {
+      Function<CharSequence, T> operation) throws TimeoutException {
     if (input == null) {
       return nullDefault;
     }
     CharSequence guarded = new TimeoutCharSequence(input, timeoutMs);
     try {
-      return operation.execute(guarded);
+      return operation.apply(guarded);
     } catch (RuntimeException e) {
       if (e.getCause() instanceof TimeoutException) {
         log.warn("Regex operation timed out after {}ms on input of length {}",

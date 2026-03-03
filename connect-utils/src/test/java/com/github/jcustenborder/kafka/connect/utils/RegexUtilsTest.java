@@ -235,72 +235,74 @@ class RegexUtilsTest {
     private static final String OPENSEARCH_EXPECTED =
             "{\"doc\": {\"field\":\"value\",\"nested\":{\"key\":123}}, \"doc_as_upsert\": true}";
 
+    @FunctionalInterface
+    interface ThrowingRunnable {
+        void run() throws Exception;
+    }
+
+    private void runConcurrently(ThrowingRunnable task, AtomicInteger counter) throws Exception {
+        runConcurrently(task, counter, null);
+    }
+
+    private void runConcurrently(
+            ThrowingRunnable task,
+            AtomicInteger counter,
+            Class<? extends Exception> expectedException) throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(THREAD_COUNT);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        List<Future<?>> futures = new ArrayList<>();
+
+        for (int i = 0; i < THREAD_COUNT; i++) {
+            futures.add(executor.submit(() -> {
+                try {
+                    startLatch.await();
+                    task.run();
+                    if (expectedException != null) {
+                        fail("Expected " + expectedException.getSimpleName());
+                    }
+                    counter.incrementAndGet();
+                } catch (Exception e) {
+                    if (expectedException != null && expectedException.isInstance(e)) {
+                        counter.incrementAndGet();
+                    } else if (!(e instanceof InterruptedException)) {
+                        fail("Unexpected exception: " + e);
+                    }
+                }
+            }));
+        }
+
+        startLatch.countDown();
+        for (Future<?> f : futures) {
+            f.get();
+        }
+        executor.shutdown();
+    }
+
     @Test
     void concurrentReplaceAllProducesCorrectResults() throws Exception {
         Pattern pattern = Pattern.compile("^(?s)(.*)$");
         Map<Pattern, String> replacements = new LinkedHashMap<>();
         replacements.put(pattern, "{\"doc\": $1, \"doc_as_upsert\": true}");
-
-        ExecutorService executor = Executors.newFixedThreadPool(THREAD_COUNT);
-        CountDownLatch startLatch = new CountDownLatch(1);
         AtomicInteger successCount = new AtomicInteger();
-        AtomicInteger failureCount = new AtomicInteger();
-        List<Future<?>> futures = new ArrayList<>();
 
-        for (int i = 0; i < THREAD_COUNT; i++) {
-            futures.add(executor.submit(() -> {
-                try {
-                    startLatch.await();
-                    String result = RegexUtils.replaceAll(OPENSEARCH_INPUT, replacements, TIMEOUT_MS);
-                    assertEquals(OPENSEARCH_EXPECTED, result);
-                    successCount.incrementAndGet();
-                } catch (TimeoutException e) {
-                    failureCount.incrementAndGet();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }));
-        }
-
-        startLatch.countDown();
-        for (Future<?> f : futures) {
-            f.get();
-        }
-        executor.shutdown();
+        runConcurrently(() -> {
+            String result = RegexUtils.replaceAll(OPENSEARCH_INPUT, replacements, TIMEOUT_MS);
+            assertEquals(OPENSEARCH_EXPECTED, result);
+        }, successCount);
 
         assertEquals(THREAD_COUNT, successCount.get(),
                 "All threads should succeed without timeout");
-        assertEquals(0, failureCount.get(),
-                "No threads should timeout on a non-pathological pattern");
     }
 
     @Test
     void concurrentFindProducesCorrectResults() throws Exception {
         Pattern pattern = Pattern.compile("\\d+");
-
-        ExecutorService executor = Executors.newFixedThreadPool(THREAD_COUNT);
-        CountDownLatch startLatch = new CountDownLatch(1);
         AtomicInteger successCount = new AtomicInteger();
-        List<Future<?>> futures = new ArrayList<>();
 
-        for (int i = 0; i < THREAD_COUNT; i++) {
-            futures.add(executor.submit(() -> {
-                try {
-                    startLatch.await();
-                    boolean result = RegexUtils.find(pattern, "abc123def", TIMEOUT_MS);
-                    assertTrue(result);
-                    successCount.incrementAndGet();
-                } catch (TimeoutException | InterruptedException e) {
-                    fail("Unexpected exception: " + e);
-                }
-            }));
-        }
-
-        startLatch.countDown();
-        for (Future<?> f : futures) {
-            f.get();
-        }
-        executor.shutdown();
+        runConcurrently(() -> {
+            boolean result = RegexUtils.find(pattern, "abc123def", TIMEOUT_MS);
+            assertTrue(result);
+        }, successCount);
 
         assertEquals(THREAD_COUNT, successCount.get());
     }
@@ -308,30 +310,12 @@ class RegexUtilsTest {
     @Test
     void concurrentMatchesProducesCorrectResults() throws Exception {
         Pattern pattern = Pattern.compile("^\\d{3}-\\d{3}-\\d{4}$");
-
-        ExecutorService executor = Executors.newFixedThreadPool(THREAD_COUNT);
-        CountDownLatch startLatch = new CountDownLatch(1);
         AtomicInteger successCount = new AtomicInteger();
-        List<Future<?>> futures = new ArrayList<>();
 
-        for (int i = 0; i < THREAD_COUNT; i++) {
-            futures.add(executor.submit(() -> {
-                try {
-                    startLatch.await();
-                    boolean result = RegexUtils.matches(pattern, "123-456-7890", TIMEOUT_MS);
-                    assertTrue(result);
-                    successCount.incrementAndGet();
-                } catch (TimeoutException | InterruptedException e) {
-                    fail("Unexpected exception: " + e);
-                }
-            }));
-        }
-
-        startLatch.countDown();
-        for (Future<?> f : futures) {
-            f.get();
-        }
-        executor.shutdown();
+        runConcurrently(() -> {
+            boolean result = RegexUtils.matches(pattern, "123-456-7890", TIMEOUT_MS);
+            assertTrue(result);
+        }, successCount);
 
         assertEquals(THREAD_COUNT, successCount.get());
     }
@@ -372,31 +356,12 @@ class RegexUtilsTest {
     void redosConcurrentTimeoutsAreIsolated() throws Exception {
         Map<Pattern, String> replacements = new LinkedHashMap<>();
         replacements.put(REDOS_CATASTROPHIC, "replaced");
-
-        ExecutorService executor = Executors.newFixedThreadPool(THREAD_COUNT);
-        CountDownLatch startLatch = new CountDownLatch(1);
         AtomicInteger timeoutCount = new AtomicInteger();
-        List<Future<?>> futures = new ArrayList<>();
 
-        for (int i = 0; i < THREAD_COUNT; i++) {
-            futures.add(executor.submit(() -> {
-                try {
-                    startLatch.await();
-                    RegexUtils.replaceAll(REDOS_TRIGGER, replacements, TIMEOUT_MS);
-                    fail("Should have thrown TimeoutException");
-                } catch (TimeoutException e) {
-                    timeoutCount.incrementAndGet();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }));
-        }
-
-        startLatch.countDown();
-        for (Future<?> f : futures) {
-            f.get();
-        }
-        executor.shutdown();
+        runConcurrently(
+                () -> RegexUtils.replaceAll(REDOS_TRIGGER, replacements, TIMEOUT_MS),
+                timeoutCount,
+                TimeoutException.class);
 
         assertEquals(THREAD_COUNT, timeoutCount.get(),
                 "All threads running ReDoS patterns should timeout independently");
