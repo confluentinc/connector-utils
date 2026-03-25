@@ -20,11 +20,11 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>io.confluent</groupId>
-        <artifactId>connect-utils-parent</artifactId>
+        <artifactId>connector-utils-parent</artifactId>
         <version>1.1.5-SNAPSHOT</version>
     </parent>
-    <artifactId>connect-utils-testing-data</artifactId>
-    <name>connect-utils-testing-data</name>
+    <artifactId>connector-utils-testing-data</artifactId>
+    <name>connector-utils-testing-data</name>
     <description>A helper library for building Kafka Connect Connectors.</description>
     <url>https://github.com/confluentinc/connector-utils</url>
     <inceptionYear>2016</inceptionYear>
@@ -67,7 +67,7 @@
     <dependencies>
         <dependency>
             <groupId>${project.parent.groupId}</groupId>
-            <artifactId>connect-utils</artifactId>
+            <artifactId>connector-utils</artifactId>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -96,7 +96,7 @@
         </dependency>
         <dependency>
             <groupId>io.confluent</groupId>
-            <artifactId>connect-utils-jackson</artifactId>
+            <artifactId>connector-utils-jackson</artifactId>
         </dependency>
     </dependencies>
     <build>
