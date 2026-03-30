@@ -19,10 +19,10 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <groupId>io.confluent</groupId>
-    <artifactId>connect-utils-parent</artifactId>
+    <artifactId>connector-utils-parent</artifactId>
     <version>1.1.5-SNAPSHOT</version>
     <packaging>pom</packaging>
-    <name>connect-utils-parent</name>
+    <name>connector-utils-parent</name>
     <description>A helper library for building Kafka Connect Connectors.</description>
     <url>https://github.com/confluentinc/connector-utils</url>
     <inceptionYear>2019</inceptionYear>
@@ -114,22 +114,22 @@
             </dependency>
             <dependency>
                 <groupId>io.confluent</groupId>
-                <artifactId>connect-utils</artifactId>
+                <artifactId>connector-utils</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>io.confluent</groupId>
-                <artifactId>connect-utils-testing</artifactId>
+                <artifactId>connector-utils-testing</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>io.confluent</groupId>
-                <artifactId>connect-utils-jackson</artifactId>
+                <artifactId>connector-utils-jackson</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>io.confluent</groupId>
-                <artifactId>connect-utils-parser</artifactId>
+                <artifactId>connector-utils-parser</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

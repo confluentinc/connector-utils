@@ -20,11 +20,11 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>io.confluent</groupId>
-        <artifactId>connect-utils-parent</artifactId>
+        <artifactId>connector-utils-parent</artifactId>
         <version>1.1.5-SNAPSHOT</version>
     </parent>
-    <artifactId>connect-utils</artifactId>
-    <name>connect-utils</name>
+    <artifactId>connector-utils</artifactId>
+    <name>connector-utils</name>
     <description>A helper library for building Kafka Connect Connectors.</description>
     <url>https://github.com/confluentinc/connector-utils</url>
     <inceptionYear>2016</inceptionYear>
