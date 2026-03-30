@@ -21,7 +21,7 @@
     <parent>
         <groupId>io.confluent</groupId>
         <artifactId>connector-utils-parent</artifactId>
-        <version>1.1.5-SNAPSHOT</version>
+        <version>1.2.2-SNAPSHOT</version>
     </parent>
     <artifactId>connector-utils-jackson</artifactId>
     <name>connector-utils-jackson</name>
@@ -56,7 +56,7 @@
         <developerConnection>scm:git:git@github.com:confluentinc/connector-utils.git
         </developerConnection>
         <url>https://github.com/confluentinc/connector-utils</url>
-      <tag>1.1.x</tag>
+      <tag>1.2.x</tag>
   </scm>
     <issueManagement>
         <system>github</system>
