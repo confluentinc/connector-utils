@@ -12,4 +12,4 @@ renovatebot:
 code_artifact:
   enable: true
   package_paths:
-    - "maven-snapshots/maven/io.confluent/connect-utils*"
+    - "maven-snapshots/maven/io.confluent/connector-utils*"
