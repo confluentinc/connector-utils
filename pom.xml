@@ -71,7 +71,7 @@
         <url>https://github.com/confluentinc/connector-utils/issues</url>
     </issueManagement>
     <properties>
-        <kafka.version>3.9.0</kafka.version>
+        <kafka.version>4.3.1</kafka.version>
         <guava.version>31.1-jre</guava.version>
 <!--
     For upgrading freemarker.version ensure to update
