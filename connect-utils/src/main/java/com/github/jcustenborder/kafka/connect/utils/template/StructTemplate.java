@@ -18,6 +18,7 @@ package com.github.jcustenborder.kafka.connect.utils.template;
 import com.google.common.base.Preconditions;
 import freemarker.cache.StringTemplateLoader;
 import freemarker.core.InvalidReferenceException;
+import freemarker.core.TemplateClassResolver;
 import freemarker.template.Configuration;
 import freemarker.template.Template;
 import freemarker.template.TemplateException;
@@ -43,6 +44,14 @@ public class StructTemplate {
     this.configuration.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
     this.configuration.setLogTemplateExceptions(false);
     this.configuration.setObjectWrapper(new ConnectObjectWrapper());
+    // Templates can come from user-supplied configuration (for example a topic name pattern), so
+    // they must not be able to create Java objects. FreeMarker's default resolver lets ?new
+    // instantiate any TemplateModel class on the classpath, including
+    // freemarker.template.utility.Execute, which runs shell commands.
+    this.configuration.setNewBuiltinClassResolver(TemplateClassResolver.ALLOWS_NOTHING_RESOLVER);
+    // ?api exposes the underlying Java API of wrapped values. It is off by default; keep it off
+    // explicitly so the configuration does not depend on that default.
+    this.configuration.setAPIBuiltinEnabled(false);
   }
 
   public void addTemplate(String templateName, String template) {
